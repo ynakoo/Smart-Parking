@@ -6,11 +6,11 @@ const JWT_SECRET = process.env.JWT_SECRET
 
 register = async (req, res) => {
     try {
-        const { name, email, password, phone, role } = req.body;
+        const { name, email, password } = req.body;
 
-        if (!['user', 'manager'].includes(role)) {
-            return res.status(400).json({ error: 'Only User and Manager can self-register.' });
-        }
+        // if (!['user'].includes(role)) {
+        //     return res.status(400).json({ error: 'Only User can self-register.' });
+        // }
 
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
@@ -24,8 +24,7 @@ register = async (req, res) => {
                 name,
                 email,
                 password: hashedPassword,
-                phone,
-                role,
+                role:"USER",
             },
         });
 
@@ -38,16 +37,17 @@ register = async (req, res) => {
 
 login = async (req, res) => {
     try {
+
         const { email, password } = req.body;
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
-            return res.status(400).json({ error: 'Invalid email or password.' });
+            return res.status(400).json({ ok:false,error: 'Invalid email or password.' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(400).json({ error: 'Invalid email or password.' });
+            return res.status(400).json({ ok:false,error: 'Invalid email or password.' });
         }
 
         const token = jwt.sign(
@@ -56,10 +56,10 @@ login = async (req, res) => {
             { expiresIn: '1d' }
         );
 
-        res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
+        res.json({ ok:true , token, user: { id: user.id, name: user.name, role: user.role } });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Server error during login.' });
+        res.status(500).json({ ok:false ,error: 'Server error during login.' });
     }
 };
 

@@ -1,6 +1,6 @@
 const express = require('express')
 const cors = require('cors')
-const prisma = require('./src/config/prisma')
+const prisma = require('./config/prisma')
 require('dotenv').config()
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -12,8 +12,13 @@ app.get('/', (req, res) => {
     res.send('backend chl gya')
 })
 
-const authRoutes = require('./src/routes/auth.routes')
+const authRoutes = require('./routes/auth.routes')
 app.use('/api/auth', authRoutes)
+
+// const userRoutes = require('./routes/user.routes')
+// const ticketRoutes = require('./routes/ticket.routes')
+// app.use('/api/user', userRoutes)
+// app.use('/api/tickets', ticketRoutes)
 
 async function main() {
     try {
@@ -30,4 +35,3 @@ async function main() {
 }
 
 main();
-
