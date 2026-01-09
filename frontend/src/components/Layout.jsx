@@ -6,7 +6,7 @@ function Layout({ children, onBack, onDashboard, onLogout, showBack, title }) {
             display: 'flex',
             flexDirection: 'column',
             height: '100vh',
-            maxWidth: '500px', // Mobile simulation like requested prompt implies mobile flow
+            maxWidth: '500px', 
             margin: '0 auto',
             border: '1px solid #ccc',
             backgroundColor: '#f5f5f5',

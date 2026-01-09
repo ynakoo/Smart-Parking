@@ -14,7 +14,7 @@ import ManagerDashboard from './components/ManagerDashboard';
 import DriverDashboard from './components/DriverDashboard';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 
-/* ---------------- MOCK DATA ---------------- */
+
 
 const INITIAL_USERS = [];
 const INITIAL_MANAGERS = [];
@@ -25,7 +25,7 @@ const INITIAL_TICKETS = [];
 const INITIAL_REQUESTS = [];
 
 function App() {
-  // --- CENTRALIZED STATE (Simulating Backend) ---
+  
   const [users, setUsers] = useState(INITIAL_USERS);
   const [managers, setManagers] = useState(INITIAL_MANAGERS);
   const [parkingAreas, setParkingAreas] = useState(INITIAL_AREAS);
@@ -34,7 +34,7 @@ function App() {
   const [tickets, setTickets] = useState(INITIAL_TICKETS);
   const [driverRequests, setDriverRequests] = useState(INITIAL_REQUESTS);
 
-  // --- APP STATE ---
+ 
   const [currentUser, setCurrentUser] = useState(null); // The logged-in User object
   const [currentScreen, setCurrentScreen] = useState('LOGIN');
   const [history, setHistory] = useState([]);
@@ -45,7 +45,7 @@ function App() {
   const [selectedArea, setSelectedArea] = useState(null);
   const [activeTicket, setActiveTicket] = useState(null); // Simplified User View
 
-  /* ----------- RESTORE SESSION (IMPORTANT) ----------- */
+  //  ----------- RESTORE SESSION ----------- 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     const savedUser = localStorage.getItem('currentUser');
@@ -122,7 +122,7 @@ function App() {
        * }
        */
 
-      // 🔐 Store token (client-side)
+      // Store token (client-side)
       
       localStorage.setItem('authToken', data.token);
       localStorage.setItem('currentUser', JSON.stringify(data.user));
@@ -149,7 +149,7 @@ function App() {
       setSelectedArea(area);
       navigateTo('SELECT_CAR');
     } else {
-      alert("Invalid QR Code"); // Basic feedback
+      alert("Invalid QR Code"); 
     }
   };
 

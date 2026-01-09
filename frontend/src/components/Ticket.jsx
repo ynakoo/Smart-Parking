@@ -110,7 +110,7 @@ function Ticket({ ticket, onRequestRetrieval, onNavigate }) {
             )}
 
             {/* Retrieval Button logic would go here if flow was PARKED -> RETRIEVE */}
-            {/* For now we just show status flow per specific user request scenario */}
+            
         </div>
     );
 }

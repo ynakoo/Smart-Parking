@@ -25,7 +25,7 @@ function ScanQR({ onScanSuccess, onCancel }) {
             alignItems: 'center',
             textAlign: 'center',
             height: '100%',
-            backgroundColor: '#000', // Camera view feel
+            backgroundColor: '#000', 
             color: 'white',
             position: 'relative',
         },
@@ -92,7 +92,7 @@ function ScanQR({ onScanSuccess, onCancel }) {
                             top: '50%',
                             boxShadow: '0 0 4px #00ff00'
                         }} />
-                        {/* We would use a real <video> element here */}
+                        {/* use a real <video> element here */}
                         <span style={{ fontSize: '12px', color: '#00ff00' }}>[CAMERA FEED]</span>
                     </>
                 )}
