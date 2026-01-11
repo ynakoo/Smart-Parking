@@ -1,19 +1,10 @@
 import React, { useState } from 'react';
 
-function MakePayment({ onNavigate, onPay }) {
+function MakePayment({ onNavigate, onPay, amount }) {
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // Mock payment details
-    const amount = 5.00;
 
-    const handlePayment = () => {
-        setIsProcessing(true);
-        // Simulate API call
-        setTimeout(() => {
-            setIsProcessing(false);
-            onPay(); // Triggers ticket generation and navigation
-        }, 1500);
-    };
+
 
     const styles = {
         container: {
@@ -58,7 +49,7 @@ function MakePayment({ onNavigate, onPay }) {
     return (
         <div style={styles.container}>
             <h2>Payment Due</h2>
-            <div style={styles.amount}>${amount.toFixed(2)}</div>
+            <div style={styles.amount}>₹{amount.toFixed(2)}</div>
 
             <div style={styles.cardForm}>
                 <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>Credit Card Details</div>
@@ -71,10 +62,14 @@ function MakePayment({ onNavigate, onPay }) {
 
             <button
                 style={{ ...styles.button, backgroundColor: isProcessing ? '#6c757d' : '#28a745' }}
-                onClick={handlePayment}
+                onClick={async () => {
+                    setIsProcessing(true);
+                    await onPay();
+                    setIsProcessing(false);
+                }}
                 disabled={isProcessing}
             >
-                {isProcessing ? 'Processing...' : `Pay $${amount.toFixed(2)}`}
+                {isProcessing ? 'Processing...' : `Pay ₹${amount.toFixed(2)}`}
             </button>
         </div>
     );

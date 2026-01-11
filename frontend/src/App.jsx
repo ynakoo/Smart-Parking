@@ -14,58 +14,124 @@ import ManagerDashboard from './components/ManagerDashboard';
 import DriverDashboard from './components/DriverDashboard';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 
-
+/* ---------------- MOCK DATA ---------------- */
 
 const INITIAL_USERS = [];
-const INITIAL_MANAGERS = [];
 const INITIAL_AREAS = [];
-const INITIAL_DRIVERS = [];
 const INITIAL_CARS = [];
 const INITIAL_TICKETS = [];
-const INITIAL_REQUESTS = [];
 
 function App() {
-  
-  const [users, setUsers] = useState(INITIAL_USERS);
-  const [managers, setManagers] = useState(INITIAL_MANAGERS);
-  const [parkingAreas, setParkingAreas] = useState(INITIAL_AREAS);
-  const [drivers, setDrivers] = useState(INITIAL_DRIVERS);
+  // --- CENTRALIZED STATE (Simulating Backend) ---
+  const [scannedArea, setScannedArea] = useState(null);
   const [cars, setCars] = useState(INITIAL_CARS);
   const [tickets, setTickets] = useState(INITIAL_TICKETS);
-  const [driverRequests, setDriverRequests] = useState(INITIAL_REQUESTS);
 
- 
+  // --- APP STATE ---
   const [currentUser, setCurrentUser] = useState(null); // The logged-in User object
   const [currentScreen, setCurrentScreen] = useState('LOGIN');
   const [history, setHistory] = useState([]);
   // consol
   // --- USER FLOW STATE ---
-
   // When a user scans a QR, we store the resolved area here
-  const [selectedArea, setSelectedArea] = useState(null);
+  const [bookingFlow, setBookingFlow] = useState({
+    carId: null,
+    parkingAreaId: null,
+    amount: null
+  })
   const [activeTicket, setActiveTicket] = useState(null); // Simplified User View
 
-  //  ----------- RESTORE SESSION ----------- 
+  /* ----------- RESTORE SESSION (IMPORTANT) ----------- */
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const savedUser = localStorage.getItem('currentUser');
-    const savedScreen = localStorage.getItem('currentScreen');
-  
-    if (token && savedUser && savedScreen) {
-      // check the token using api
-      setCurrentUser(JSON.parse(savedUser));
-      setCurrentScreen(savedScreen);
+    try {
+      const token = localStorage.getItem('authToken');
+      const savedUser = localStorage.getItem('currentUser');
+      const savedScreen = localStorage.getItem('currentScreen');
+      if (token && savedUser && savedScreen) {
+        const parsedUser = JSON.parse(savedUser);
+        if (parsedUser) {
+          setCurrentUser(parsedUser);
+          setHistory([savedScreen]);
+          setCurrentScreen(savedScreen);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to restore session:", e);
+      localStorage.clear(); // Clear corrupted session
     }
   }, []);
-  // --- NAVIGATION ---
+  console.log(currentUser);
+  // FIX: Restore fetchCars to prevent crash
+  const fetchCars = async () => {
+    if (!currentUser) return;
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+
+      const res = await fetch('http://localhost:5001/api/user/cars', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCars(data);
+      }
+    } catch (error) {
+      console.error("Error fetching cars:", error);
+    }
+  };
+
+  const handleAddCar = async (carData) => {
+    try {
+      const token = localStorage.getItem('authToken');
+
+      const res = await fetch('http://localhost:5001/api/user/cars', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(carData)
+      });
+
+      if (!res.ok) throw new Error('Failed to add car');
+
+      const newCar = await res.json();
+
+      // update global state
+      setCars(prev => [...prev, newCar]);
+
+    } catch (err) {
+      console.error(err);
+      alert('Failed to add car');
+    }
+  };
+
+  // SYNC CARS ON SCREEN CHANGE (To ensure latest cars are available for BusinessInfo)
+  useEffect(() => {
+    if (currentUser) {
+      fetchCars();
+    }
+  }, [currentUser]); // Verify cars whenever screen changes (e.g. after adding car)
+
   const navigateTo = (screen, data = {}) => {
+    if (Object.keys(data).length > 0) {
+      setBookingFlow(prev => ({ ...prev, ...data }));
+      if (data.ticket) {
+        setActiveTicket(data.ticket);
+      }
+    }
+    if (data.ticket) {
+      setActiveTicket(data.ticket);
+    }
     if (screen == 'LOGIN' || screen == 'REGISTER') {
       setCurrentScreen(screen);
     }
     else {
       setHistory(prev => [...prev, screen]);
       setCurrentScreen(screen);
-      localStorage.setItem('currentScreen', screen);
+      // localStorage.setItem('currentScreen', screen);
     }
     // Handle data passing if needed (usually via state updates before nav)
   };
@@ -87,7 +153,6 @@ function App() {
   const handleLogout = () => {
     localStorage.clear();
     setCurrentUser(null);
-    setSelectedArea(null);
     setHistory([]);
     setCurrentScreen('LOGIN');
   };
@@ -104,8 +169,14 @@ function App() {
       });
 
       if (!response.ok) {
-        const errData = await response.json();
-        return { success: false, message: errData.error };
+        let errData = {};
+        try {
+          errData = await response.json();
+        } catch (e) {
+          errData = { error: 'Server error' };
+        }
+        console.log(errData);
+        return { success: false, message: errData.error || 'Login failed' };
       }
 
       const data = await response.json();
@@ -123,7 +194,7 @@ function App() {
        */
 
       // Store token (client-side)
-      
+
       localStorage.setItem('authToken', data.token);
       localStorage.setItem('currentUser', JSON.stringify(data.user));
 
@@ -142,49 +213,66 @@ function App() {
 
   // --- BUSINESS LOGIC: USER ---
 
-  const handleScanSuccess = (qrCode) => {
-    // Find area by qrCode
-    const area = parkingAreas.find(a => a.qrCode === qrCode);
-    if (area) {
-      setSelectedArea(area);
-      navigateTo('SELECT_CAR');
-    } else {
-      alert("Invalid QR Code"); 
+
+  const handleScanSuccess = async (qrCode) => {
+    try {
+      const token = localStorage.getItem('authToken');
+
+      const res = await fetch(
+        `http://localhost:5001/api/user/parking-area-by-qr/${qrCode}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Invalid QR Code');
+        return;
+      }
+      setScannedArea(data);
+      navigateTo('SELECT_CAR', { parkingAreaId: data.id });
+
+    } catch (err) {
+      console.error(err);
+      alert('Server error while scanning QR: ' + (err.message || 'Unknown error'));
     }
   };
 
-  const handleAddCar = (carData) => new Promise((resolve) => {
-    const newCar = { ...carData, id: `c-${Date.now()}`, userId: currentUser.id };
-    setCars([...cars, newCar]);
-    resolve();
-  });
+  // const handleAddCar = (carData) => new Promise((resolve) => {
+  //   const newCar = { ...carData, id: `c-${Date.now()}`, userId: currentUser.id };
+  //   setCars([...cars, newCar]);
+  //   resolve();
+  // });
 
-  const handlePaymentSuccess = (carId) => {
-    // 1. Create Ticket
-    const newTicket = {
-      ticketNumber: `TKT-${Date.now()}`,
-      status: 'CALLED', // waiting for driver
-      carId: carId,
-      createdAt: new Date().toISOString(),
-      userId: currentUser.id,
-      parkingAreaId: selectedArea.id
-    };
+  const handlePaymentSuccess = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const res = await fetch('http://localhost:5001/api/user/create-ticket', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          carId: bookingFlow.carId,
+          parkingAreaId: bookingFlow.parkingAreaId
+        })
+      });
 
-    // 2. Create Driver Request (Broadcast to Area)
-    const newRequest = {
-      id: `REQ-${Date.now()}`,
-      requestType: 'PARKING',
-      ticketNo: newTicket.ticketNumber,
-      driverId: null, // Broadcast
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-      parkingAreaId: selectedArea.id // Helper for filtering
-    };
+      if (!res.ok) throw new Error('Payment/Ticket creation failed');
+      const newTicket = await res.json();
 
-    setTickets([...tickets, newTicket]);
-    setDriverRequests([...driverRequests, newRequest]);
-    setActiveTicket(newTicket);
-    navigateTo('TICKET_DISPLAY');
+      setTickets([newTicket, ...tickets]);
+      setActiveTicket(newTicket);
+      navigateTo('TICKET_DISPLAY');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate ticket. Please try again.');
+    }
   };
 
   // --- BUSINESS LOGIC: DRIVER ---
@@ -211,50 +299,50 @@ function App() {
   };
 
   // --- BUSINESS LOGIC: SUPER ADMIN ---
-  const handleAddManager = (userData) => {
-    // Create user with role MANAGER
-    const newUser = { ...userData, id: `u-${Date.now()}`, role: 'MANAGER' };
-    // Create Manager entry (Pending until assigned)
-    const newManager = { userId: newUser.id, status: 'PENDING' };
+  // const handleAddManager = (userData) => {
+  //   // Create user with role MANAGER
+  //   const newUser = { ...userData, id: `u-${Date.now()}`, role: 'MANAGER' };
+  //   // Create Manager entry (Pending until assigned)
+  //   const newManager = { userId: newUser.id, status: 'PENDING' };
 
-    setUsers([...users, newUser]);
-    setManagers([...managers, newManager]);
-  };
+  //   setUsers([...users, newUser]);
+  //   setManagers([...managers, newManager]);
+  // };
 
-  const handleCreateArea = (areaData, managerUserId) => {
-    // Create Area
-    const newArea = { ...areaData, id: `area-${Date.now()}`, managerId: managerUserId };
-    setParkingAreas([...parkingAreas, newArea]);
+  // const handleCreateArea = (areaData, managerUserId) => {
+  //   // Create Area
+  //   const newArea = { ...areaData, id: `area-${Date.now()}`, managerId: managerUserId };
+  //   setParkingAreas([...parkingAreas, newArea]);
 
-    // Update Manager Status to ACTIVE
-    const updatedManagers = managers.map(m =>
-      m.userId === managerUserId ? { ...m, status: 'ACTIVE' } : m
-    );
-    setManagers(updatedManagers);
-  };
+  //   // Update Manager Status to ACTIVE
+  //   const updatedManagers = managers.map(m =>
+  //     m.userId === managerUserId ? { ...m, status: 'ACTIVE' } : m
+  //   );
+  //   setManagers(updatedManagers);
+  // };
 
-  const handleApproveDriver = (driverUserId) => {
-    // This assumes there's a flow to add a PENDING Driver. 
-    // For now, let's assume SuperAdmin can just create the driver entirely or flip status.
-    // Based on requirement: Manager sends request -> Admin approves.
-    // So we need "addPendingDriver" action from Manager.
-    const updatedDrivers = drivers.map(d =>
-      d.userId === driverUserId ? { ...d, status: 'AVAILABLE' } : d
-    );
-    setDrivers(updatedDrivers);
-  };
+  // const handleApproveDriver = (driverUserId) => {
+  //   // This assumes there's a flow to add a PENDING Driver. 
+  //   // For now, let's assume SuperAdmin can just create the driver entirely or flip status.
+  //   // Based on requirement: Manager sends request -> Admin approves.
+  //   // So we need "addPendingDriver" action from Manager.
+  //   const updatedDrivers = drivers.map(d =>
+  //     d.userId === driverUserId ? { ...d, status: 'AVAILABLE' } : d
+  //   );
+  //   setDrivers(updatedDrivers);
+  // };
 
   // --- BUSINESS LOGIC: MANAGER ---
-  const handleRequestAddDriver = (driverUserData, parkingAreaId) => {
-    // Create User (Driver)
-    const newUser = { ...driverUserData, id: `u-${Date.now()}`, role: 'DRIVER' };
-    // Create Driver (Pending Validation/Approval)
-    const newDriver = { userId: newUser.id, parkingAreaId, status: 'INACTIVE', dlNumber: driverUserData.dlNumber };
+  // const handleRequestAddDriver = (driverUserData, parkingAreaId) => {
+  //   // Create User (Driver)
+  //   const newUser = { ...driverUserData, id: `u-${Date.now()}`, role: 'DRIVER' };
+  //   // Create Driver (Pending Validation/Approval)
+  //   const newDriver = { userId: newUser.id, parkingAreaId, status: 'INACTIVE', dlNumber: driverUserData.dlNumber };
 
-    setUsers([...users, newUser]);
-    setDrivers([...drivers, newDriver]);
-    // Note: Real world would have a specific "Approval Request" object or just filter drivers by status 'INACTIVE'
-  };
+  //   setUsers([...users, newUser]);
+  //   setDrivers([...drivers, newDriver]);
+  //   // Note: Real world would have a specific "Approval Request" object or just filter drivers by status 'INACTIVE'
+  // };
 
 
   // --- RENDERER ---
@@ -270,68 +358,48 @@ function App() {
           <Dashboard
             user={currentUser}
             activeTicket={activeTicket} // Find actual active ticket from state?
-            bookings={[]}
             onNavigate={navigateTo}
           />
         );
       case 'SCAN_QR':
         return <ScanQR onScanSuccess={handleScanSuccess} onCancel={() => navigateTo('USER_DASHBOARD')} />;
       case 'SELECT_CAR':
-        return <SelectCar cars={cars.filter(c => c.userId === currentUser.id)} onAddCar={handleAddCar} onNavigate={navigateTo} />;
+        // Removed handleAddCar prop to fix ReferenceError
+        // SelectCar fetches its own cars initially, but App fetches them for BusinessInfo
+        return <SelectCar cars={cars}
+          onAddCar={handleAddCar}
+          onNavigate={navigateTo} />;
       case 'MAKE_PAYMENT':
-        return <MakePayment onPay={handlePaymentSuccess} onNavigate={navigateTo} />;
+        return <MakePayment onPay={handlePaymentSuccess} onNavigate={navigateTo} amount={bookingFlow.amount} />;
       case 'TICKET_DISPLAY':
         return <Ticket ticket={activeTicket} onNavigate={navigateTo} />;
-
       // ROLE DASHBOARDS
       case 'MANAGER_DASHBOARD':
-        // Find assigned area
-        {const assignedArea = parkingAreas.find(p => p.managerId === currentUser.id);
-        const managerInfo = managers.find(m => m.userId === currentUser.id)
-
-        return (
-          <ManagerDashboard
-            user={currentUser}
-            managerInfo={managerInfo}
-            parkingArea={assignedArea}
-            onAddDriver={handleRequestAddDriver}
-            onNavigate={navigateTo}
-          />
-        )};
-
-      case 'DRIVER_DASHBOARD':{
-        // Find Driver Entry to get Area ID
-        const driverProfile = drivers.find(d => d.userId === currentUser.id);
-        // BROADCASST FILTER: status PENDING + same Area
-        const areaRequests = driverRequests.filter(r =>
-          r.status === 'PENDING' &&
-          r.parkingAreaId === driverProfile?.parkingAreaId
-        );
+        return <ManagerDashboard user={currentUser} />;
+      case 'DRIVER_DASHBOARD': {
         return (
           <DriverDashboard
             user={currentUser}
-            driverProfile={driverProfile}
-            requests={areaRequests}
-            onAccept={handleAcceptRequest}
-            onNavigate={navigateTo}
           />
-        )};
-
-      case 'ADMIN_DASHBOARD':
+        )
+      };
+      case 'SUPERADMIN_DASHBOARD':
         return (
-          <SuperAdminDashboard
-            users={users}
-            managers={managers}
-            drivers={drivers}
-            parkingAreas={parkingAreas}
-            onAddManager={handleAddManager}
-            onCreateArea={handleCreateArea}
-            onApproveDriver={handleApproveDriver}
-            onNavigate={navigateTo}
-          />
+          <SuperAdminDashboard />
         );
       case 'REGISTER':
         return <Register onNavigate={navigateTo} />;
+      case 'BUSINESS_INFO': {
+        const selectedCar = cars.find(c => c.id === bookingFlow.carId);
+        const selectedArea = scannedArea;
+        return (
+          <BusinessInfo
+            car={selectedCar}
+            parkingArea={selectedArea}
+            onNavigate={navigateTo}
+          />
+        );
+      }
       default:
         return <div>Screen {currentScreen} not found</div>;
     }
@@ -344,7 +412,11 @@ function App() {
       {isAuthScreen ? (
         <Layout
           onBack={history.length > 1 ? goBack : null}
-          onDashboard={() => handleLogin(currentUser.email, currentUser.password)} // Quick reset
+          onDashboard={() => {
+            setHistory([`${currentUser.role}_DASHBOARD`]);
+            setCurrentScreen(`${currentUser.role}_DASHBOARD`);
+            localStorage.setItem('currentScreen', `${currentUser.role}_DASHBOARD`);
+          }} // Quick reset
           onLogout={handleLogout}
           showBack={history.length > 1}
           title={`${currentUser?.role} Dashboard`}

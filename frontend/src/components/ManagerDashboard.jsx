@@ -1,89 +1,118 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
-function ManagerDashboard({ user, managerInfo, parkingArea, onAddDriver, onNavigate }) {
+function ManagerDashboard({ user }) {
+    const [managerData, setManagerData] = useState(null);
     const [showAddDriver, setShowAddDriver] = useState(false);
     const [newDriver, setNewDriver] = useState({ name: '', email: '', password: '', dlNumber: '' });
 
-    const handleAddDriverSubmit = (e) => {
+    const token = localStorage.getItem('authToken');
+
+    const fetchDashboard = async () => {
+        try {
+            const res = await fetch('http://localhost:5001/api/manager/dashboard', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (!res.ok) throw new Error('Unauthorized');
+
+            const data = await res.json();
+            setManagerData(data);
+        } catch (err) {
+            console.error(err);
+            alert('Session expired. Please login again.');
+            localStorage.clear();
+            window.location.href = '/';
+        }
+    };
+
+    useEffect(() => {
+        if (!token) {
+            window.location.href = '/';
+            return;
+        }
+        fetchDashboard();
+    }, []);
+
+    const submitDriverRequest = async (e) => {
         e.preventDefault();
-        onAddDriver(newDriver, parkingArea.id);
-        setShowAddDriver(false);
-        setNewDriver({ name: '', email: '', password: '', dlNumber: '' });
-        alert("Driver addition requested! Super Admin must approve.");
+        try {
+            const res = await fetch('http://localhost:5001/api/manager/request-driver', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify(newDriver)
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) throw new Error(data.error);
+
+            alert('Driver request sent to Super Admin');
+            setNewDriver({ name: '', email: '', password: '', dlNumber: '' });
+            setShowAddDriver(false);
+            fetchDashboard();
+        } catch (err) {
+            alert(err.message || 'Failed to send request');
+        }
     };
 
-    const styles = {
-        container: { padding: '20px' },
-        card: { backgroundColor: 'white', padding: '15px', borderRadius: '8px', marginBottom: '15px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
-        button: { padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', width: '100%' },
-        input: { display: 'block', width: '100%', padding: '8px', marginBottom: '10px', boxSizing: 'border-box' }
-    };
+    if (!managerData) return <div className="container" style={{ padding: 20 }}>Loading manager dashboard...</div>;
 
-    if (!parkingArea) {
+    if (!managerData.area) {
         return (
-            <div style={styles.container}>
-                <h3>Welcome, {user.name}</h3>
-                <div style={styles.card}>
-                    <p>Status: {managerInfo?.status}</p>
-                    <p>You are not assigned to any Parking Area yet.</p>
+            <div className="container" style={{ padding: 20 }}>
+                <h3>Welcome {user?.name}</h3>
+                <p>Status: {managerData.status}</p>
+                <div className="card" style={{ marginTop: 20, backgroundColor: '#fff3cd' }}>
+                    <p>No parking area assigned yet. Please contact Super Admin.</p>
                 </div>
             </div>
         );
     }
 
-    return (
-        <div style={styles.container}>
-            <h3>Parking Manager: {parkingArea.name}</h3>
+    const area = managerData.area;
 
-            <div style={styles.card}>
-                <h4>Your Area Details</h4>
-                <p><strong>Location:</strong> {parkingArea.location}</p>
-                <p><strong>QR Code ID:</strong> {parkingArea.qrCode}</p>
-                <p><strong>Hourly Rate:</strong> ${parkingArea.amount}</p>
+    return (
+        <div className="container" style={{ padding: '20px' }}>
+            <h2>{area.name}</h2>
+            <div className="card" style={{ marginBottom: '20px' }}>
+                <p><b>Location:</b> {area.location}</p>
+                <p><b>Rate:</b> ₹{area.amount}/hr</p>
+                <p><b>Status:</b> {managerData.status}</p>
             </div>
 
-            <button style={styles.button} onClick={() => setShowAddDriver(!showAddDriver)}>
-                {showAddDriver ? 'Cancel' : 'Add New Driver'}
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h3>Drivers</h3>
+                <button className="btn btn-primary" onClick={() => setShowAddDriver(!showAddDriver)}>
+                    {showAddDriver ? 'Cancel' : 'Request New Driver'}
+                </button>
+            </div>
 
             {showAddDriver && (
-                <div style={{ ...styles.card, marginTop: '10px', border: '1px solid #007bff' }}>
-                    <h4>Register New Driver</h4>
-                    <form onSubmit={handleAddDriverSubmit}>
-                        <input
-                            style={styles.input}
-                            placeholder="Name"
-                            value={newDriver.name}
-                            onChange={e => setNewDriver({ ...newDriver, name: e.target.value })}
-                            required
-                        />
-                        <input
-                            style={styles.input}
-                            placeholder="Email"
-                            type="email"
-                            value={newDriver.email}
-                            onChange={e => setNewDriver({ ...newDriver, email: e.target.value })}
-                            required
-                        />
-                        <input
-                            style={styles.input}
-                            placeholder="Password"
-                            type="password"
-                            value={newDriver.password}
-                            onChange={e => setNewDriver({ ...newDriver, password: e.target.value })}
-                            required
-                        />
-                        <input
-                            style={styles.input}
-                            placeholder="DL Number"
-                            value={newDriver.dlNumber}
-                            onChange={e => setNewDriver({ ...newDriver, dlNumber: e.target.value })}
-                            required
-                        />
-                        <button type="submit" style={{ ...styles.button, backgroundColor: '#28a745' }}>Submit Request</button>
+                <div className="card" style={{ backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}>
+                    <h4>New Driver Request</h4>
+                    <form onSubmit={submitDriverRequest} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <input className="input" placeholder="Name" required onChange={e => setNewDriver({ ...newDriver, name: e.target.value })} style={{ padding: '10px' }} />
+                        <input className="input" placeholder="Email" required onChange={e => setNewDriver({ ...newDriver, email: e.target.value })} style={{ padding: '10px' }} />
+                        <input className="input" placeholder="Password" required type="password" onChange={e => setNewDriver({ ...newDriver, password: e.target.value })} style={{ padding: '10px' }} />
+                        <input className="input" placeholder="DL Number" required onChange={e => setNewDriver({ ...newDriver, dlNumber: e.target.value })} style={{ padding: '10px' }} />
+                        <button className="btn btn-primary" type="submit">Send Request</button>
                     </form>
                 </div>
             )}
+
+            {(!area.drivers || area.drivers.length === 0) && <p>No drivers assigned yet.</p>}
+
+            <div className="grid">
+                {area.drivers?.map(d => (
+                    <div key={d.userId} className="card">
+                        <div style={{ fontWeight: 'bold' }}>{d.user?.name || 'Unknown Driver'}</div>
+                        <div>Status: <span style={{ color: d.status === 'AVAILABLE' ? 'var(--success-color)' : 'var(--warning-color)', fontWeight: 'bold' }}>{d.status}</span></div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
